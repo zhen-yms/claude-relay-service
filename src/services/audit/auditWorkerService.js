@@ -27,8 +27,45 @@ class AuditWorkerService {
     this.eventPublisher = options.eventPublisher || auditEventPublisher
     this.configProvider = options.configProvider || getAuditConfig
     this.maxAttempts = options.maxAttempts || this.configProvider().maxAttempts
+    this.blockingRedisClientFactory =
+      options.blockingRedisClientFactory || this.createDefaultBlockingRedisClient.bind(this)
+    this.blockingRedisClient = null
     this.running = false
     this.loopPromise = null
+  }
+
+  async createDefaultBlockingRedisClient() {
+    const sharedClient = redis.getClientSafe()
+    if (typeof sharedClient.duplicate !== 'function') {
+      throw new Error('Redis client does not support duplicate connections')
+    }
+
+    const client = sharedClient.duplicate()
+    client.on('error', (error) => {
+      logger.warn(`⚠️ Audit worker redis connection error: ${error.message}`)
+    })
+
+    if (client.status === 'ready') {
+      return client
+    }
+    if (client.status === 'connecting' || client.status === 'connect') {
+      await new Promise((resolve, reject) => {
+        client.once('ready', resolve)
+        client.once('error', reject)
+      })
+      return client
+    }
+
+    await client.connect()
+    return client
+  }
+
+  async getBlockingRedisClient() {
+    if (this.blockingRedisClient && this.blockingRedisClient.status !== 'end') {
+      return this.blockingRedisClient
+    }
+    this.blockingRedisClient = await this.blockingRedisClientFactory()
+    return this.blockingRedisClient
   }
 
   async findEventManifestPaths(rootDir) {
@@ -169,11 +206,20 @@ class AuditWorkerService {
 
   stop() {
     this.running = false
+    if (this.blockingRedisClient) {
+      const client = this.blockingRedisClient
+      this.blockingRedisClient = null
+      try {
+        client.disconnect(false)
+      } catch (error) {
+        logger.warn(`⚠️ Failed to close audit worker redis connection: ${error.message}`)
+      }
+    }
   }
 
   async pollLoop() {
     const config = this.configProvider()
-    const client = redis.getClientSafe()
+    const client = await this.getBlockingRedisClient()
 
     while (this.running) {
       const response = await client
@@ -195,6 +241,9 @@ class AuditWorkerService {
         })
 
       if (!response) {
+        if (!this.running) {
+          break
+        }
         await this.replaySpoolEvents().catch((error) => {
           logger.warn(`⚠️ Audit worker spool replay failed: ${error.message}`)
         })

@@ -14,6 +14,7 @@ jest.mock('../src/models/redis', () => ({
 }))
 
 const { AuditWorkerService } = require('../src/services/audit/auditWorkerService')
+const redis = require('../src/models/redis')
 
 describe('AuditWorkerService', () => {
   let tempDir
@@ -132,5 +133,58 @@ describe('AuditWorkerService', () => {
       })
     )
     await expect(fs.stat(spoolPath)).resolves.toBeTruthy()
+  })
+
+  test('uses a dedicated redis connection for blocking stream reads', async () => {
+    let worker
+    const sharedClient = {
+      xreadgroup: jest.fn(async () => {
+        worker.running = false
+        return null
+      })
+    }
+    const blockingClient = {
+      xreadgroup: jest.fn(async () => {
+        worker.running = false
+        return null
+      }),
+      xack: jest.fn()
+    }
+    redis.getClientSafe.mockReturnValue(sharedClient)
+
+    worker = new AuditWorkerService({
+      repository: {},
+      objectStorage: {},
+      eventPublisher: {},
+      configProvider: () => ({
+        streamKey: 'audit:events',
+        workerGroup: 'audit-workers',
+        workerConsumer: 'audit-worker-test',
+        workerBlockMs: 5000,
+        spoolDir: tempDir,
+        maxAttempts: 3,
+        enabled: true,
+        workerEnabled: true
+      }),
+      blockingRedisClientFactory: jest.fn().mockResolvedValue(blockingClient)
+    })
+
+    worker.running = true
+    await worker.pollLoop()
+
+    expect(redis.getClientSafe).not.toHaveBeenCalled()
+    expect(sharedClient.xreadgroup).not.toHaveBeenCalled()
+    expect(blockingClient.xreadgroup).toHaveBeenCalledWith(
+      'GROUP',
+      'audit-workers',
+      'audit-worker-test',
+      'BLOCK',
+      5000,
+      'COUNT',
+      10,
+      'STREAMS',
+      'audit:events',
+      '>'
+    )
   })
 })
