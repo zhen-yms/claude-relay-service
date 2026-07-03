@@ -827,6 +827,23 @@ class Application {
     } else {
       logger.info('🧪 Account test scheduler service disabled')
     }
+
+    // 🧾 启动 AI 调用审计 worker（可选，失败不阻断主服务）
+    try {
+      const auditWorkerService = require('./services/audit/auditWorkerService')
+      auditWorkerService
+        .start()
+        .then((started) => {
+          if (started) {
+            logger.info('🧾 AI call audit worker started')
+          }
+        })
+        .catch((error) => {
+          logger.warn('⚠️ AI call audit worker failed to start:', error.message)
+        })
+    } catch (error) {
+      logger.warn('⚠️ AI call audit worker failed to start:', error.message)
+    }
   }
 
   setupGracefulShutdown() {
@@ -888,6 +905,15 @@ class Application {
             logger.info('🧪 Account test scheduler service stopped')
           } catch (error) {
             logger.error('❌ Error stopping account test scheduler service:', error)
+          }
+
+          // 停止 AI 调用审计 worker
+          try {
+            const auditWorkerService = require('./services/audit/auditWorkerService')
+            auditWorkerService.stop()
+            logger.info('🧾 AI call audit worker stopped')
+          } catch (error) {
+            logger.error('❌ Error stopping AI call audit worker:', error)
           }
 
           // 🔢 清理所有并发计数（Phase 1 修复：防止重启泄漏）

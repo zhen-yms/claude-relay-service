@@ -22,6 +22,16 @@ const { getSafeMessage } = require('../utils/errorSanitizer')
 const ProxyHelper = require('../utils/proxyHelper')
 const upstreamErrorHelper = require('../utils/upstreamErrorHelper')
 const { createRequestDetailMeta } = require('../utils/requestDetailHelper')
+const auditCaptureService = require('../services/audit/auditCaptureService')
+
+function captureAuditUpstream(req, provider, payload, meta = {}) {
+  const writePromise = auditCaptureService.captureUpstreamRequest(req, provider, payload, meta)
+  if (writePromise?.catch) {
+    writePromise.catch((error) => {
+      logger.warn(`⚠️ Failed to capture upstream audit payload: ${error.message}`)
+    })
+  }
+}
 
 // 处理 Gemini 上游错误，标记账户为临时不可用
 const handleGeminiUpstreamError = async (
@@ -548,6 +558,14 @@ async function handleMessages(req, res) {
       }
 
       try {
+        captureAuditUpstream(req, 'gemini-api', requestBody, {
+          accountId: account.id,
+          accountType: 'gemini-api',
+          endpoint: apiUrl.replace(/key=[^&]+/, 'key=***'),
+          stream,
+          model
+        })
+
         const apiResponse = await axios(axiosConfig)
         if (stream) {
           geminiResponse = apiResponse.data
@@ -612,6 +630,26 @@ async function handleMessages(req, res) {
       const oauthProvider = account.oauthProvider || 'gemini-cli'
 
       if (oauthProvider === 'antigravity') {
+        captureAuditUpstream(
+          req,
+          'antigravity',
+          {
+            messages,
+            model,
+            temperature,
+            maxTokens: max_tokens,
+            stream,
+            projectId: effectiveProjectId
+          },
+          {
+            accountId: account.id,
+            accountType: 'gemini',
+            stream,
+            model,
+            projectId: effectiveProjectId
+          }
+        )
+
         geminiResponse = await sendAntigravityRequest({
           messages,
           model,
@@ -630,6 +668,26 @@ async function handleMessages(req, res) {
           })
         })
       } else {
+        captureAuditUpstream(
+          req,
+          account.oauthProvider || 'gemini-cli',
+          {
+            messages,
+            model,
+            temperature,
+            maxTokens: max_tokens,
+            stream,
+            projectId: effectiveProjectId
+          },
+          {
+            accountId: account.id,
+            accountType: 'gemini',
+            stream,
+            model,
+            projectId: effectiveProjectId
+          }
+        )
+
         geminiResponse = await sendGeminiRequest({
           messages,
           model,
@@ -1710,6 +1768,19 @@ async function handleGenerateContent(req, res) {
           : '从loadCodeAssist获取'
     })
 
+    captureAuditUpstream(
+      req,
+      oauthProvider,
+      { model, request: actualRequestData },
+      {
+        accountId,
+        accountType: 'gemini',
+        stream: false,
+        model,
+        projectId: effectiveProjectId
+      }
+    )
+
     const response =
       oauthProvider === 'antigravity'
         ? await geminiAccountService.generateContentAntigravity(
@@ -1963,6 +2034,19 @@ async function handleStreamGenerateContent(req, res) {
           ? '使用临时项目ID'
           : '从loadCodeAssist获取'
     })
+
+    captureAuditUpstream(
+      req,
+      oauthProvider,
+      { model, request: actualRequestData },
+      {
+        accountId,
+        accountType: 'gemini',
+        stream: true,
+        model,
+        projectId: effectiveProjectId
+      }
+    )
 
     const streamResponse =
       oauthProvider === 'antigravity'
@@ -2357,6 +2441,14 @@ async function handleStandardGenerateContent(req, res) {
       }
 
       try {
+        captureAuditUpstream(req, 'gemini-api', actualRequestData, {
+          accountId: account.id,
+          accountType: 'gemini-api',
+          endpoint: apiUrl.replace(/key=[^&]+/, 'key=***'),
+          stream: false,
+          model
+        })
+
         const apiResponse = await axios(axiosConfig)
         response = { response: apiResponse.data }
       } catch (error) {
@@ -2423,6 +2515,19 @@ async function handleStandardGenerateContent(req, res) {
       })
 
       const userPromptId = `${crypto.randomUUID()}########0`
+
+      captureAuditUpstream(
+        req,
+        oauthProvider,
+        { model, request: actualRequestData },
+        {
+          accountId: actualAccountId,
+          accountType: 'gemini',
+          stream: false,
+          model,
+          projectId: effectiveProjectId
+        }
+      )
 
       if (oauthProvider === 'antigravity') {
         response = await geminiAccountService.generateContentAntigravity(
@@ -2679,6 +2784,14 @@ async function handleStandardStreamGenerateContent(req, res) {
       }
 
       try {
+        captureAuditUpstream(req, 'gemini-api', actualRequestData, {
+          accountId: account.id,
+          accountType: 'gemini-api',
+          endpoint: apiUrl.replace(/key=[^&]+/, 'key=***'),
+          stream: true,
+          model
+        })
+
         const apiResponse = await axios(axiosConfig)
         streamResponse = apiResponse.data
       } catch (error) {
@@ -2745,6 +2858,19 @@ async function handleStandardStreamGenerateContent(req, res) {
       })
 
       const userPromptId = `${crypto.randomUUID()}########0`
+
+      captureAuditUpstream(
+        req,
+        oauthProvider,
+        { model, request: actualRequestData },
+        {
+          accountId: actualAccountId,
+          accountType: 'gemini',
+          stream: true,
+          model,
+          projectId: effectiveProjectId
+        }
+      )
 
       if (oauthProvider === 'antigravity') {
         streamResponse = await geminiAccountService.generateContentStreamAntigravity(

@@ -104,6 +104,30 @@ const config = {
   // ⏱️ 请求超时配置
   requestTimeout: parseInt(process.env.REQUEST_TIMEOUT) || 600000, // 默认 10 分钟
 
+  // 🧾 AI 调用全量审计配置
+  audit: {
+    enabled: process.env.AUDIT_CAPTURE_ENABLED === 'true',
+    retentionDays: parseInt(process.env.AUDIT_RETENTION_DAYS) || 180,
+    failurePolicy: process.env.AUDIT_FAILURE_POLICY || 'nonblocking',
+    postgresUrl: process.env.AUDIT_POSTGRES_URL || '',
+    minioEndpoint: process.env.AUDIT_MINIO_ENDPOINT || '',
+    minioBucket: process.env.AUDIT_MINIO_BUCKET || 'ai-call-audit',
+    minioAccessKey: process.env.AUDIT_MINIO_ACCESS_KEY || '',
+    minioSecretKey: process.env.AUDIT_MINIO_SECRET_KEY || '',
+    minioRegion: process.env.AUDIT_MINIO_REGION || 'us-east-1',
+    objectKeyPrefix: process.env.AUDIT_OBJECT_KEY_PREFIX || 'ai-call-audit',
+    spoolDir: process.env.AUDIT_SPOOL_DIR || path.join(__dirname, '..', 'data', 'audit-spool'),
+    streamKey: process.env.AUDIT_STREAM_KEY || 'audit:events',
+    retryStreamKey: process.env.AUDIT_RETRY_STREAM_KEY || 'audit:events:retry',
+    deadLetterStreamKey: process.env.AUDIT_DEAD_LETTER_STREAM_KEY || 'audit:events:dead-letter',
+    streamMaxLength: parseInt(process.env.AUDIT_STREAM_MAX_LENGTH) || 100000,
+    workerEnabled: process.env.AUDIT_WORKER_ENABLED !== 'false',
+    workerGroup: process.env.AUDIT_WORKER_GROUP || 'audit-workers',
+    workerConsumer: process.env.AUDIT_WORKER_CONSUMER || process.env.HOSTNAME || 'audit-worker-1',
+    workerBlockMs: parseInt(process.env.AUDIT_WORKER_BLOCK_MS) || 5000,
+    maxAttempts: parseInt(process.env.AUDIT_MAX_ATTEMPTS) || 5
+  },
+
   // 📈 使用限制
   limits: {
     defaultTokenLimit: parseInt(process.env.DEFAULT_TOKEN_LIMIT) || 1000000

@@ -22,11 +22,21 @@ const {
 const { sanitizeUpstreamError } = require('../utils/errorSanitizer')
 const { dumpAnthropicMessagesRequest } = require('../utils/anthropicRequestDump')
 const { createRequestDetailMeta } = require('../utils/requestDetailHelper')
+const auditCaptureService = require('../services/audit/auditCaptureService')
 const {
   handleAnthropicMessagesToGemini,
   handleAnthropicCountTokensToGemini
 } = require('../services/anthropicGeminiBridgeService')
 const router = express.Router()
+
+function captureAuditUpstream(req, provider, payload, meta = {}) {
+  const writePromise = auditCaptureService.captureUpstreamRequest(req, provider, payload, meta)
+  if (writePromise?.catch) {
+    writePromise.catch((error) => {
+      logger.warn(`⚠️ Failed to capture upstream audit payload: ${error.message}`)
+    })
+  }
+}
 
 function queueRateLimitUpdate(
   rateLimitInfo,
@@ -433,6 +443,12 @@ async function handleMessagesRequest(req, res) {
         const _apiKey = req.apiKey
         const _headers = req.headers
 
+        captureAuditUpstream(req, 'claude-official', _requestBody, {
+          accountId,
+          accountType,
+          stream: true
+        })
+
         await claudeRelayService.relayStreamRequestWithUsageCapture(
           _requestBody,
           _apiKey,
@@ -566,6 +582,12 @@ async function handleMessagesRequest(req, res) {
         const _requestBodyConsole = req.body
         const _apiKeyConsole = req.apiKey
         const _headersConsole = req.headers
+
+        captureAuditUpstream(req, 'claude-console', _requestBodyConsole, {
+          accountId,
+          accountType,
+          stream: true
+        })
 
         await claudeConsoleRelayService.relayStreamRequestWithUsageCapture(
           _requestBodyConsole,
@@ -703,6 +725,12 @@ async function handleMessagesRequest(req, res) {
         const _requestBodyBedrock = req.body
 
         try {
+          captureAuditUpstream(req, 'bedrock', _requestBodyBedrock, {
+            accountId,
+            accountType,
+            stream: true
+          })
+
           const bedrockAccountResult = await bedrockAccountService.getAccount(accountId)
           if (!bedrockAccountResult.success) {
             throw new Error('Failed to get Bedrock account details')
@@ -797,6 +825,12 @@ async function handleMessagesRequest(req, res) {
         const _requestBodyCcr = req.body
         const _apiKeyCcr = req.apiKey
         const _headersCcr = req.headers
+
+        captureAuditUpstream(req, 'ccr', _requestBodyCcr, {
+          accountId,
+          accountType,
+          stream: true
+        })
 
         await ccrRelayService.relayStreamRequestWithUsageCapture(
           _requestBodyCcr,
@@ -1134,6 +1168,12 @@ async function handleMessagesRequest(req, res) {
 
       if (accountType === 'claude-official') {
         // 官方Claude账号使用原有的转发服务
+        captureAuditUpstream(req, 'claude-official', _requestBodyNonStream, {
+          accountId,
+          accountType,
+          stream: false
+        })
+
         response = await claudeRelayService.relayRequest(
           _requestBodyNonStream,
           _apiKeyNonStream,
@@ -1146,6 +1186,12 @@ async function handleMessagesRequest(req, res) {
         logger.debug(
           `[DEBUG] Calling claudeConsoleRelayService.relayRequest with accountId: ${accountId}`
         )
+        captureAuditUpstream(req, 'claude-console', _requestBodyNonStream, {
+          accountId,
+          accountType,
+          stream: false
+        })
+
         response = await claudeConsoleRelayService.relayRequest(
           _requestBodyNonStream,
           _apiKeyNonStream,
@@ -1157,6 +1203,12 @@ async function handleMessagesRequest(req, res) {
       } else if (accountType === 'bedrock') {
         // Bedrock账号使用Bedrock转发服务
         try {
+          captureAuditUpstream(req, 'bedrock', _requestBodyNonStream, {
+            accountId,
+            accountType,
+            stream: false
+          })
+
           const bedrockAccountResult = await bedrockAccountService.getAccount(accountId)
           if (!bedrockAccountResult.success) {
             throw new Error('Failed to get Bedrock account details')
@@ -1195,6 +1247,12 @@ async function handleMessagesRequest(req, res) {
       } else if (accountType === 'ccr') {
         // CCR账号使用CCR转发服务
         logger.debug(`[DEBUG] Calling ccrRelayService.relayRequest with accountId: ${accountId}`)
+        captureAuditUpstream(req, 'ccr', _requestBodyNonStream, {
+          accountId,
+          accountType,
+          stream: false
+        })
+
         response = await ccrRelayService.relayRequest(
           _requestBodyNonStream,
           _apiKeyNonStream,

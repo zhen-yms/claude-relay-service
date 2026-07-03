@@ -8,6 +8,16 @@ const { getAvailableModels } = require('../services/relay/geminiRelayService')
 const crypto = require('crypto')
 const apiKeyService = require('../services/apiKeyService')
 const { createRequestDetailMeta } = require('../utils/requestDetailHelper')
+const auditCaptureService = require('../services/audit/auditCaptureService')
+
+function captureAuditUpstream(req, provider, payload, meta = {}) {
+  const writePromise = auditCaptureService.captureUpstreamRequest(req, provider, payload, meta)
+  if (writePromise?.catch) {
+    writePromise.catch((error) => {
+      logger.warn(`⚠️ Failed to capture upstream audit payload: ${error.message}`)
+    })
+  }
+}
 
 // 生成会话哈希
 function generateSessionHash(req) {
@@ -368,6 +378,19 @@ router.post('/v1/chat/completions', authenticateApiKey, async (req, res) => {
         apiKeyId: apiKeyData.id
       })
 
+      captureAuditUpstream(
+        req,
+        oauthProvider,
+        { model, request: geminiRequestBody },
+        {
+          accountId: account.id,
+          accountType: 'gemini',
+          stream: true,
+          model,
+          projectId
+        }
+      )
+
       const streamResponse =
         oauthProvider === 'antigravity'
           ? await geminiAccountService.generateContentStreamAntigravity(
@@ -615,6 +638,19 @@ router.post('/v1/chat/completions', authenticateApiKey, async (req, res) => {
         projectId,
         apiKeyId: apiKeyData.id
       })
+
+      captureAuditUpstream(
+        req,
+        oauthProvider,
+        { model, request: geminiRequestBody },
+        {
+          accountId: account.id,
+          accountType: 'gemini',
+          stream: false,
+          model,
+          projectId
+        }
+      )
 
       const response =
         oauthProvider === 'antigravity'
