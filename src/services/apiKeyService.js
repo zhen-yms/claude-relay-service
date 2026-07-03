@@ -5,6 +5,7 @@ const redis = require('../models/redis')
 const logger = require('../utils/logger')
 const serviceRatesService = require('./serviceRatesService')
 const requestDetailService = require('./requestDetailService')
+const auditCaptureService = require('./audit/auditCaptureService')
 const { isClaudeFamilyModel } = require('../utils/modelHelper')
 const { finalizeRequestDetailMeta } = require('../utils/requestDetailHelper')
 const requestBodyRuleService = require('./requestBodyRuleService')
@@ -2136,8 +2137,9 @@ class ApiKeyService {
       return
     }
 
+    const requestId = requestMeta?.requestId || usageRecord.requestId || null
     await requestDetailService.captureRequestDetail({
-      requestId: requestMeta?.requestId || usageRecord.requestId || null,
+      requestId,
       timestamp: usageRecord.timestamp,
       requestStartedAt: requestMeta?.requestStartedAt || null,
       endpoint: requestMeta?.endpoint || usageRecord.endpoint || null,
@@ -2163,6 +2165,19 @@ class ApiKeyService {
       usedFallbackPricing: usageRecord.usedFallbackPricing === true,
       isLongContextRequest:
         usageRecord.isLongContext === true || usageRecord.isLongContextRequest === true
+    })
+
+    await auditCaptureService.recordUsage(requestId, {
+      accountId: usageRecord.accountId || null,
+      accountType: usageRecord.accountType || null,
+      model: usageRecord.model || 'unknown',
+      inputTokens: usageRecord.inputTokens || 0,
+      outputTokens: usageRecord.outputTokens || 0,
+      cacheReadTokens: usageRecord.cacheReadTokens || 0,
+      cacheCreateTokens: usageRecord.cacheCreateTokens || 0,
+      totalTokens: usageRecord.totalTokens || 0,
+      cost: usageRecord.cost || 0,
+      realCost: usageRecord.realCost || usageRecord.cost || 0
     })
   }
 

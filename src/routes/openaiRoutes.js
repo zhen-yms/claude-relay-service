@@ -20,6 +20,16 @@ const {
   extractOpenAICacheReadTokens
 } = require('../utils/requestDetailHelper')
 const requestBodyRuleService = require('../services/requestBodyRuleService')
+const auditCaptureService = require('../services/audit/auditCaptureService')
+
+function captureAuditUpstream(req, provider, payload, meta = {}) {
+  const writePromise = auditCaptureService.captureUpstreamRequest(req, provider, payload, meta)
+  if (writePromise?.catch) {
+    writePromise.catch((error) => {
+      logger.warn(`⚠️ Failed to capture upstream audit payload: ${error.message}`)
+    })
+  }
+}
 
 // Codex CLI 系统提示词（非 Codex CLI 客户端请求时注入，统一端点也使用）
 const CODEX_CLI_INSTRUCTIONS =
@@ -453,6 +463,14 @@ const handleResponses = async (req, res) => {
     const codexEndpoint = compactRoute
       ? 'https://chatgpt.com/backend-api/codex/responses/compact'
       : 'https://chatgpt.com/backend-api/codex/responses'
+
+    captureAuditUpstream(req, 'openai-codex', req.body, {
+      accountId,
+      accountType,
+      endpoint: codexEndpoint,
+      stream: isStream,
+      model: req.body?.model || null
+    })
 
     // 根据 stream 参数决定请求类型
     if (isStream) {

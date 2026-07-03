@@ -5,8 +5,18 @@ const droidRelayService = require('../services/relay/droidRelayService')
 const sessionHelper = require('../utils/sessionHelper')
 const logger = require('../utils/logger')
 const apiKeyService = require('../services/apiKeyService')
+const auditCaptureService = require('../services/audit/auditCaptureService')
 
 const router = express.Router()
+
+function captureAuditUpstream(req, provider, payload, meta = {}) {
+  const writePromise = auditCaptureService.captureUpstreamRequest(req, provider, payload, meta)
+  if (writePromise?.catch) {
+    writePromise.catch((error) => {
+      logger.warn(`⚠️ Failed to capture upstream audit payload: ${error.message}`)
+    })
+  }
+}
 
 function hasDroidPermission(apiKeyData) {
   return apiKeyService.hasPermission(apiKeyData?.permissions, 'droid')
@@ -35,6 +45,13 @@ router.post('/claude/v1/messages', authenticateApiKey, async (req, res) => {
         message: '此 API Key 未启用 Droid 权限'
       })
     }
+
+    captureAuditUpstream(req, 'droid', req.body, {
+      accountType: 'droid',
+      endpointType: 'anthropic',
+      stream: req.body?.stream || false,
+      model: req.body?.model || null
+    })
 
     const result = await droidRelayService.relayRequest(
       req.body,
@@ -85,6 +102,13 @@ router.post('/comm/v1/chat/completions', authenticateApiKey, async (req, res) =>
       })
     }
 
+    captureAuditUpstream(req, 'droid', req.body, {
+      accountType: 'droid',
+      endpointType: 'comm',
+      stream: req.body?.stream || false,
+      model: req.body?.model || null
+    })
+
     const result = await droidRelayService.relayRequest(
       req.body,
       req.apiKey,
@@ -131,6 +155,13 @@ router.post(['/openai/v1/responses', '/openai/responses'], authenticateApiKey, a
         message: '此 API Key 未启用 Droid 权限'
       })
     }
+
+    captureAuditUpstream(req, 'droid', req.body, {
+      accountType: 'droid',
+      endpointType: 'openai',
+      stream: req.body?.stream || false,
+      model: req.body?.model || null
+    })
 
     const result = await droidRelayService.relayRequest(
       req.body,

@@ -41,6 +41,13 @@ jest.mock('../src/services/serviceRatesService', () => ({
 jest.mock('../src/services/requestDetailService', () => ({
   captureRequestDetail: jest.fn()
 }))
+jest.mock(
+  '../src/services/audit/auditCaptureService',
+  () => ({
+    recordUsage: jest.fn()
+  }),
+  { virtual: true }
+)
 jest.mock('../src/services/billingEventPublisher', () => ({
   publishBillingEvent: jest.fn()
 }))
@@ -57,6 +64,7 @@ jest.mock('../src/utils/requestDetailHelper', () => ({
 const redis = require('../src/models/redis')
 const serviceRatesService = require('../src/services/serviceRatesService')
 const requestDetailService = require('../src/services/requestDetailService')
+const auditCaptureService = require('../src/services/audit/auditCaptureService')
 const billingEventPublisher = require('../src/services/billingEventPublisher')
 const CostCalculator = require('../src/utils/costCalculator')
 const apiKeyService = require('../src/services/apiKeyService')
@@ -77,6 +85,7 @@ describe('apiKeyService openai responses config', () => {
     serviceRatesService.getService.mockReturnValue('claude')
     serviceRatesService.getServiceRate.mockResolvedValue(1)
     requestDetailService.captureRequestDetail.mockResolvedValue({ captured: true })
+    auditCaptureService.recordUsage.mockResolvedValue({ recorded: true })
     billingEventPublisher.publishBillingEvent.mockResolvedValue()
   })
 
@@ -234,6 +243,18 @@ describe('apiKeyService openai responses config', () => {
         realCost: 0.052997,
         usedFallbackPricing: true,
         pricingSource: 'unknown-fallback'
+      })
+    )
+    expect(auditCaptureService.recordUsage).toHaveBeenCalledWith(
+      'req-1',
+      expect.objectContaining({
+        model: 'mimo-v2.5-pro',
+        inputTokens: 17206,
+        outputTokens: 51,
+        cacheReadTokens: 2048,
+        totalTokens: 19305,
+        cost: 0.052997,
+        realCost: 0.052997
       })
     )
   })

@@ -8,6 +8,7 @@ const redis = require('../models/redis')
 const ClientValidator = require('../validators/clientValidator')
 const ClaudeCodeValidator = require('../validators/clients/claudeCodeValidator')
 const claudeRelayConfigService = require('../services/claudeRelayConfigService')
+const auditCaptureService = require('../services/audit/auditCaptureService')
 const { calculateWaitTimeStats } = require('../utils/statsHelper')
 const { isClaudeFamilyModel } = require('../utils/modelHelper')
 
@@ -1328,6 +1329,7 @@ const authenticateApiKey = async (req, res, next) => {
       `🔓 Authenticated request from key: ${validation.keyData.name} (${validation.keyData.id}) in ${authDuration}ms`
     )
     logger.api(`   User-Agent: "${userAgent}"`)
+    auditCaptureService.start(req, res)
 
     return next()
   } catch (error) {

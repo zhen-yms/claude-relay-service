@@ -8,6 +8,16 @@ const apiKeyService = require('../services/apiKeyService')
 const crypto = require('crypto')
 const upstreamErrorHelper = require('../utils/upstreamErrorHelper')
 const { createRequestDetailMeta } = require('../utils/requestDetailHelper')
+const auditCaptureService = require('../services/audit/auditCaptureService')
+
+function captureAuditUpstream(req, provider, payload, meta = {}) {
+  const writePromise = auditCaptureService.captureUpstreamRequest(req, provider, payload, meta)
+  if (writePromise?.catch) {
+    writePromise.catch((error) => {
+      logger.warn(`⚠️ Failed to capture upstream audit payload: ${error.message}`)
+    })
+  }
+}
 
 // 支持的模型列表 - 基于真实的 Azure OpenAI 模型
 const ALLOWED_MODELS = {
@@ -195,6 +205,14 @@ router.post('/chat/completions', authenticateApiKey, async (req, res) => {
       account = await azureOpenaiAccountService.selectAvailableAccount(sessionId)
     }
 
+    captureAuditUpstream(req, 'azure-openai', req.body, {
+      accountId: account?.id || null,
+      accountType: 'azure-openai',
+      endpoint: 'chat/completions',
+      stream: req.body.stream || false,
+      model: req.body?.model || null
+    })
+
     // 发送请求到 Azure OpenAI
     const response = await azureOpenaiRelayService.handleAzureOpenAIRequest({
       account,
@@ -326,6 +344,14 @@ router.post('/responses', authenticateApiKey, async (req, res) => {
       account = await azureOpenaiAccountService.selectAvailableAccount(sessionId)
     }
 
+    captureAuditUpstream(req, 'azure-openai', req.body, {
+      accountId: account?.id || null,
+      accountType: 'azure-openai',
+      endpoint: 'responses',
+      stream: req.body.stream || false,
+      model: req.body?.model || null
+    })
+
     // 发送请求到 Azure OpenAI
     const response = await azureOpenaiRelayService.handleAzureOpenAIRequest({
       account,
@@ -455,6 +481,14 @@ router.post('/embeddings', authenticateApiKey, async (req, res) => {
     if (!account || account.isActive !== 'true') {
       account = await azureOpenaiAccountService.selectAvailableAccount(sessionId)
     }
+
+    captureAuditUpstream(req, 'azure-openai', req.body, {
+      accountId: account?.id || null,
+      accountType: 'azure-openai',
+      endpoint: 'embeddings',
+      stream: false,
+      model: req.body?.model || null
+    })
 
     // 发送请求到 Azure OpenAI
     const response = await azureOpenaiRelayService.handleAzureOpenAIRequest({

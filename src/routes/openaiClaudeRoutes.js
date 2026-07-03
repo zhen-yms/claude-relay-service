@@ -19,6 +19,16 @@ const { updateRateLimitCounters } = require('../utils/rateLimitHelper')
 const pricingService = require('../services/pricingService')
 const { getEffectiveModel } = require('../utils/modelHelper')
 const { createRequestDetailMeta } = require('../utils/requestDetailHelper')
+const auditCaptureService = require('../services/audit/auditCaptureService')
+
+function captureAuditUpstream(req, provider, payload, meta = {}) {
+  const writePromise = auditCaptureService.captureUpstreamRequest(req, provider, payload, meta)
+  if (writePromise?.catch) {
+    writePromise.catch((error) => {
+      logger.warn(`⚠️ Failed to capture upstream audit payload: ${error.message}`)
+    })
+  }
+}
 
 // 🔧 辅助函数：检查 API Key 权限
 function checkPermissions(apiKeyData, requiredPermission = 'claude') {
@@ -257,6 +267,12 @@ async function handleChatCompletion(req, res, apiKeyData) {
     // 处理流式请求
     if (claudeRequest.stream) {
       logger.info(`🌊 Processing OpenAI stream request for model: ${req.body.model}`)
+      captureAuditUpstream(req, `openai-claude-${accountType}`, claudeRequest, {
+        accountId,
+        accountType,
+        stream: true,
+        model: claudeRequest.model || null
+      })
 
       // 设置 SSE 响应头
       res.setHeader('Content-Type', 'text/event-stream')
@@ -383,6 +399,12 @@ async function handleChatCompletion(req, res, apiKeyData) {
     } else {
       // 非流式请求
       logger.info(`📄 Processing OpenAI non-stream request for model: ${req.body.model}`)
+      captureAuditUpstream(req, `openai-claude-${accountType}`, claudeRequest, {
+        accountId,
+        accountType,
+        stream: false,
+        model: claudeRequest.model || null
+      })
 
       // 根据账户类型选择转发服务
       let claudeResponse

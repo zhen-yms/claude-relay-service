@@ -52,6 +52,16 @@ const {
   dumpAntigravityStreamEvent,
   dumpAntigravityStreamSummary
 } = require('../utils/antigravityUpstreamResponseDump')
+const auditCaptureService = require('./audit/auditCaptureService')
+
+function captureAuditUpstream(req, provider, payload, meta = {}) {
+  const writePromise = auditCaptureService.captureUpstreamRequest(req, provider, payload, meta)
+  if (writePromise?.catch) {
+    writePromise.catch((error) => {
+      logger.warn(`⚠️ Failed to capture upstream audit payload: ${error.message}`)
+    })
+  }
+}
 
 // ============================================================================
 // 常量定义
@@ -2000,6 +2010,14 @@ async function handleAnthropicMessagesToGemini(req, res, { vendor, baseModel }) 
   if (!isStream) {
     try {
       const attemptRequest = async (payload) => {
+        captureAuditUpstream(req, vendor, payload, {
+          accountId,
+          accountType,
+          stream: false,
+          model: payload?.model || effectiveModel,
+          projectId
+        })
+
         if (vendor === 'antigravity') {
           return await geminiAccountService.generateContentAntigravity(
             client,
@@ -2067,6 +2085,14 @@ async function handleAnthropicMessagesToGemini(req, res, { vendor, baseModel }) 
             logger.info(
               `🔄 Retrying non-stream with new account: ${newAccountId} (was: ${accountId})`
             )
+            captureAuditUpstream(req, vendor, requestData, {
+              accountId: newAccountId,
+              accountType,
+              stream: false,
+              model: requestData?.model || effectiveModel,
+              projectId,
+              retryReason: 'account_switch'
+            })
             // 用新账户的 client 重试
             rawResponse =
               vendor === 'antigravity'
@@ -2206,6 +2232,14 @@ async function handleAnthropicMessagesToGemini(req, res, { vendor, baseModel }) 
 
   try {
     const startStream = async (payload) => {
+      captureAuditUpstream(req, vendor, payload, {
+        accountId,
+        accountType,
+        stream: true,
+        model: payload?.model || effectiveModel,
+        projectId
+      })
+
       if (vendor === 'antigravity') {
         return await geminiAccountService.generateContentStreamAntigravity(
           client,
@@ -2270,6 +2304,14 @@ async function handleAnthropicMessagesToGemini(req, res, { vendor, baseModel }) 
             throw new Error('Failed to get new Gemini client for retry')
           }
           logger.info(`🔄 Retrying with new account: ${newAccountId} (was: ${accountId})`)
+          captureAuditUpstream(req, vendor, requestData, {
+            accountId: newAccountId,
+            accountType,
+            stream: true,
+            model: requestData?.model || effectiveModel,
+            projectId,
+            retryReason: 'account_switch'
+          })
           // 用新账户的 client 重试
           streamResponse =
             vendor === 'antigravity'
