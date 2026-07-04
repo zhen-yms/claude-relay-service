@@ -47,8 +47,8 @@ class AuditObjectStorage {
         ContentType: 'application/json',
         ContentEncoding: 'gzip',
         Metadata: {
-          request_id: String(call.requestId || ''),
-          artifact_kind: String(artifact.kind || '')
+          'request-id': String(call.requestId || ''),
+          'artifact-kind': String(artifact.kind || '')
         }
       })
     )
