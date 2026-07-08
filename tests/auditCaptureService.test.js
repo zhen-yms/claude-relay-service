@@ -53,7 +53,8 @@ function createReq() {
     apiKey: {
       id: 'key_1',
       name: 'Shared Key',
-      userId: 'user_1'
+      userId: 'user_1',
+      userUsername: 'alice'
     }
   }
 }
@@ -117,6 +118,8 @@ describe('auditCaptureService', () => {
 
     const event = auditEventPublisher.publishCaptureEvent.mock.calls[0][0]
     expect(event.requestId).toBe('req_capture_test')
+    expect(event.userId).toBe('user_1')
+    expect(event.userUsername).toBe('alice')
     expect(event.retentionUntil).toBe('2026-12-30T12:00:00.000Z')
     expect(event.eventSpoolPath).toEqual(expect.stringContaining('req_capture_test-event.json'))
     expect(event.artifacts.map((artifact) => artifact.kind).sort()).toEqual([
@@ -126,6 +129,7 @@ describe('auditCaptureService', () => {
 
     const eventManifest = JSON.parse(await fs.readFile(event.eventSpoolPath, 'utf8'))
     expect(eventManifest.requestId).toBe('req_capture_test')
+    expect(eventManifest.userUsername).toBe('alice')
 
     const clientArtifact = event.artifacts.find((artifact) => artifact.kind === 'client_request')
     const responseArtifact = event.artifacts.find((artifact) => artifact.kind === 'response')

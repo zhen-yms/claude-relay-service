@@ -48,6 +48,7 @@ class AuditRepository {
         api_key_id TEXT NULL,
         api_key_name TEXT NULL,
         user_id TEXT NULL,
+        user_username TEXT NULL,
         account_id TEXT NULL,
         account_type TEXT NULL,
         model TEXT NULL,
@@ -68,6 +69,11 @@ class AuditRepository {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         PRIMARY KEY (request_id, created_at)
       ) PARTITION BY RANGE (created_at)
+    `)
+
+    await this.query(`
+      ALTER TABLE IF EXISTS audit_calls
+      ADD COLUMN IF NOT EXISTS user_username TEXT NULL
     `)
 
     await this.query(`
@@ -107,7 +113,7 @@ class AuditRepository {
       `
         INSERT INTO audit_calls (
           request_id, created_at, request_started_at, endpoint, method, protocol,
-          api_key_id, api_key_name, user_id, account_id, account_type, model,
+          api_key_id, api_key_name, user_id, user_username, account_id, account_type, model,
           status, status_code, stream, input_tokens, output_tokens, cache_read_tokens,
           cache_create_tokens, total_tokens, cost, real_cost, retention_until,
           capture_status, error, meta, updated_at
@@ -115,8 +121,8 @@ class AuditRepository {
           $1, $2, $3, $4, $5, $6,
           $7, $8, $9, $10, $11, $12,
           $13, $14, $15, $16, $17, $18,
-          $19, $20, $21, $22, $23,
-          $24, $25, $26::jsonb, now()
+          $19, $20, $21, $22, $23, $24,
+          $25, $26, $27::jsonb, now()
         )
         ON CONFLICT (request_id, created_at) DO UPDATE SET
           request_started_at = EXCLUDED.request_started_at,
@@ -125,7 +131,8 @@ class AuditRepository {
           protocol = EXCLUDED.protocol,
           api_key_id = EXCLUDED.api_key_id,
           api_key_name = EXCLUDED.api_key_name,
-          user_id = EXCLUDED.user_id,
+          user_id = COALESCE(EXCLUDED.user_id, audit_calls.user_id),
+          user_username = COALESCE(EXCLUDED.user_username, audit_calls.user_username),
           account_id = COALESCE(EXCLUDED.account_id, audit_calls.account_id),
           account_type = COALESCE(EXCLUDED.account_type, audit_calls.account_type),
           model = COALESCE(EXCLUDED.model, audit_calls.model),
@@ -155,6 +162,7 @@ class AuditRepository {
         call.apiKeyId || null,
         call.apiKeyName || null,
         call.userId || null,
+        call.userUsername || null,
         call.accountId || null,
         call.accountType || null,
         call.model || null,

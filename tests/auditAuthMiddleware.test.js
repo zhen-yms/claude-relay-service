@@ -88,6 +88,8 @@ describe('authenticateApiKey audit integration', () => {
         dailyCostLimit: 0,
         totalCostLimit: 0,
         weeklyOpusCostLimit: 0,
+        userId: 'user_1',
+        userUsername: 'alice',
         permissions: ['claude'],
         enableModelRestriction: false,
         restrictedModels: [],
@@ -118,6 +120,8 @@ describe('authenticateApiKey audit integration', () => {
 
     expect(next).toHaveBeenCalledTimes(1)
     expect(req.apiKey.id).toBe('key_1')
+    expect(req.apiKey.userId).toBe('user_1')
+    expect(req.apiKey.userUsername).toBe('alice')
     expect(auditCaptureService.start).toHaveBeenCalledWith(req, res)
   })
 })
