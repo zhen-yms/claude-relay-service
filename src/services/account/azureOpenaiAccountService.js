@@ -4,6 +4,7 @@ const crypto = require('crypto')
 const config = require('../../../config/config')
 const logger = require('../../utils/logger')
 const upstreamErrorHelper = require('../../utils/upstreamErrorHelper')
+const { selectAccountBySchedulingWeight } = require('../../utils/commonHelper')
 
 // 加密相关常量
 const ALGORITHM = 'aes-256-cbc'
@@ -437,9 +438,9 @@ async function selectAvailableAccount(sessionId = null) {
     throw new Error('No available Azure OpenAI accounts')
   }
 
-  // 按优先级排序并选择
-  availableAccounts.sort((a, b) => (b.priority || 50) - (a.priority || 50))
-  const selectedAccount = availableAccounts[0]
+  const selectedAccount = selectAccountBySchedulingWeight(availableAccounts, {
+    stateKey: 'azure-openai:shared'
+  })
 
   // 如果有会话ID，保存映射关系
   if (sessionId && selectedAccount) {

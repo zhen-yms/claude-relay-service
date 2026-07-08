@@ -43,7 +43,7 @@ class OpenAIResponsesAccountService {
       baseApi = '', // 必填：API 基础地址
       apiKey = '', // 必填：API 密钥
       userAgent = '', // 可选：自定义 User-Agent，空则透传原始请求
-      priority = 50, // 调度优先级 (1-100)
+      priority = 50, // 调度权重 (1-100，数字越大分配越多)
       proxy = null,
       isActive = true,
       accountType = 'shared', // 'dedicated' or 'shared'

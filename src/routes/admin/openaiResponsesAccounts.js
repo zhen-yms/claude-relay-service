@@ -212,7 +212,7 @@ router.put('/openai-responses-accounts/:id', authenticateAdmin, async (req, res)
       if (isNaN(priority) || priority < 1 || priority > 100) {
         return res.status(400).json({
           success: false,
-          message: 'Priority must be a number between 1 and 100'
+          message: 'Scheduling weight must be a number between 1 and 100'
         })
       }
       mappedUpdates.priority = priority.toString()

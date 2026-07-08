@@ -1981,21 +1981,21 @@
               </label>
             </div>
 
-            <!-- 所有平台的优先级设置 -->
+            <!-- 所有平台的调度权重设置 -->
             <div>
               <label class="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300"
-                >调度优先级 (1-100)</label
+                >调度权重 (1-100)</label
               >
               <input
                 v-model.number="form.priority"
                 class="form-input w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:placeholder-gray-400"
                 max="100"
                 min="1"
-                placeholder="数字越小优先级越高，默认50"
+                placeholder="数字越大分配比例越高，默认50"
                 type="number"
               />
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                数字越小优先级越高，建议范围：1-100
+                数字越大调度占比越高，例如 10/30/60 约等于 1:3:6
               </p>
             </div>
 
@@ -3004,21 +3004,21 @@
             </label>
           </div>
 
-          <!-- 所有平台的优先级设置（编辑模式） -->
+          <!-- 所有平台的调度权重设置（编辑模式） -->
           <div>
             <label class="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300"
-              >调度优先级 (1-100)</label
+              >调度权重 (1-100)</label
             >
             <input
               v-model.number="form.priority"
               class="form-input w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:placeholder-gray-400"
               max="100"
               min="1"
-              placeholder="数字越小优先级越高"
+              placeholder="数字越大分配比例越高"
               type="number"
             />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              数字越小优先级越高，建议范围：1-100
+              数字越大调度占比越高，例如 10/30/60 约等于 1:3:6
             </p>
           </div>
 
@@ -5101,7 +5101,7 @@ const handleOAuthSuccess = async (tokenInfoOrList) => {
       if (form.value.projectId) {
         data.projectId = form.value.projectId
       }
-      // 添加 Gemini 优先级
+      // 添加 Gemini 调度权重
       data.priority = form.value.priority || 50
     } else if (currentPlatform === 'openai') {
       data.openaiOauth = tokenInfo.tokens || tokenInfo
@@ -5446,7 +5446,7 @@ const createAccount = async () => {
         data.projectId = form.value.projectId
       }
 
-      // 添加 Gemini 优先级
+      // 添加 Gemini 调度权重
       data.priority = form.value.priority || 50
     } else if (form.value.platform === 'openai') {
       // OpenAI手动模式需要构建openaiOauth对象
@@ -5813,7 +5813,7 @@ const updateAccount = async () => {
       data.endpointType = form.value.endpointType || 'anthropic'
     }
 
-    // Claude 官方账号优先级和订阅类型更新
+    // Claude 官方账号调度权重和订阅类型更新
     if (props.account.platform === 'claude') {
       // 更新模式也需要确保生成客户端ID
       if (form.value.useUnifiedClientId && !form.value.unifiedClientId) {
@@ -5837,12 +5837,12 @@ const updateAccount = async () => {
       }
     }
 
-    // OpenAI 账号优先级更新
+    // OpenAI 账号调度权重更新
     if (props.account.platform === 'openai') {
       data.priority = form.value.priority || 50
     }
 
-    // Gemini 账号优先级更新
+    // Gemini 账号调度权重更新
     if (props.account.platform === 'gemini') {
       data.priority = form.value.priority || 50
     }

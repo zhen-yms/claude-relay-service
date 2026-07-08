@@ -40,7 +40,7 @@ class GeminiApiAccountService {
       apiKey = '', // 必填：Google AI Studio API Key
       baseUrl = 'https://generativelanguage.googleapis.com', // 默认 Gemini API 基础 URL
       proxy = null,
-      priority = 50, // 调度优先级 (1-100)
+      priority = 50, // 调度权重 (1-100，数字越大分配越多)
       isActive = true,
       accountType = 'shared', // 'dedicated' or 'shared'
       schedulable = true, // 是否可被调度

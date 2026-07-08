@@ -86,18 +86,18 @@
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label class="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300"
-                >优先级</label
+                >调度权重</label
               >
               <input
                 v-model.number="form.priority"
                 class="form-input w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
                 max="100"
                 min="1"
-                placeholder="默认50，数字越小优先级越高"
+                placeholder="默认50，数字越大分配比例越高"
                 type="number"
               />
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                建议范围：1-100，数字越小优先级越高
+                建议范围：1-100，数字越大调度占比越高
               </p>
             </div>
             <div>

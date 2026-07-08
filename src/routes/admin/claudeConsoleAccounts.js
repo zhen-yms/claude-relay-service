@@ -142,7 +142,7 @@ router.post('/claude-console-accounts', authenticateAdmin, async (req, res) => {
 
     // 验证priority的有效性（1-100）
     if (priority !== undefined && (priority < 1 || priority > 100)) {
-      return res.status(400).json({ error: 'Priority must be between 1 and 100' })
+      return res.status(400).json({ error: 'Scheduling weight must be between 1 and 100' })
     }
 
     // 验证maxConcurrentTasks的有效性（非负整数）
@@ -221,7 +221,7 @@ router.put('/claude-console-accounts/:accountId', authenticateAdmin, async (req,
       mappedUpdates.priority !== undefined &&
       (mappedUpdates.priority < 1 || mappedUpdates.priority > 100)
     ) {
-      return res.status(400).json({ error: 'Priority must be between 1 and 100' })
+      return res.status(400).json({ error: 'Scheduling weight must be between 1 and 100' })
     }
 
     // 验证maxConcurrentTasks的有效性（非负整数）

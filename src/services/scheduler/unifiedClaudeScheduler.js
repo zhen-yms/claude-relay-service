@@ -6,7 +6,7 @@ const accountGroupService = require('../accountGroupService')
 const redis = require('../../models/redis')
 const logger = require('../../utils/logger')
 const { parseVendorPrefixedModel, isOpus45OrNewer } = require('../../utils/modelHelper')
-const { isSchedulable, sortAccountsByPriority } = require('../../utils/commonHelper')
+const { isSchedulable, selectAccountBySchedulingWeight } = require('../../utils/commonHelper')
 const upstreamErrorHelper = require('../../utils/upstreamErrorHelper')
 
 /**
@@ -427,11 +427,9 @@ class UnifiedClaudeScheduler {
         }
       }
 
-      // 按优先级和最后使用时间排序
-      const sortedAccounts = sortAccountsByPriority(availableAccounts)
-
-      // 选择第一个账户
-      const selectedAccount = sortedAccounts[0]
+      const selectedAccount = selectAccountBySchedulingWeight(availableAccounts, {
+        stateKey: `claude:shared:${effectiveModel || '*'}`
+      })
 
       // 如果有会话哈希，建立新的映射
       if (sessionHash) {
@@ -446,7 +444,7 @@ class UnifiedClaudeScheduler {
       }
 
       logger.info(
-        `🎯 Selected account: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}) with priority ${selectedAccount.priority} for API key ${apiKeyData.name}`
+        `🎯 Selected account: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}) with weight ${selectedAccount.priority} for API key ${apiKeyData.name}`
       )
 
       return {
@@ -662,7 +660,7 @@ class UnifiedClaudeScheduler {
           ...account,
           accountId: account.id,
           accountType: 'claude-official',
-          priority: parseInt(account.priority) || 50, // 默认优先级50
+          priority: parseInt(account.priority) || 50, // 默认调度权重50
           lastUsedAt: account.lastUsedAt || '0'
         })
       }
@@ -783,7 +781,7 @@ class UnifiedClaudeScheduler {
               lastUsedAt: currentAccount.lastUsedAt || '0'
             })
             logger.info(
-              `✅ Added Claude Console account to available pool: ${currentAccount.name} (priority: ${currentAccount.priority}, no concurrency limit)`
+              `✅ Added Claude Console account to available pool: ${currentAccount.name} (weight: ${currentAccount.priority}, no concurrency limit)`
             )
           }
         } else {
@@ -829,7 +827,7 @@ class UnifiedClaudeScheduler {
             lastUsedAt: account.lastUsedAt || '0'
           })
           logger.info(
-            `✅ Added Claude Console account to available pool: ${account.name} (priority: ${account.priority}, concurrency: ${currentConcurrency}/${account.maxConcurrentTasks})`
+            `✅ Added Claude Console account to available pool: ${account.name} (weight: ${account.priority}, concurrency: ${currentConcurrency}/${account.maxConcurrentTasks})`
           )
         } else {
           // 🔢 因并发满额被排除，计数器加1
@@ -875,7 +873,7 @@ class UnifiedClaudeScheduler {
             lastUsedAt: account.lastUsedAt || '0'
           })
           logger.info(
-            `✅ Added Bedrock account to available pool: ${account.name} (priority: ${account.priority})`
+            `✅ Added Bedrock account to available pool: ${account.name} (weight: ${account.priority})`
           )
         } else {
           logger.info(
@@ -934,7 +932,7 @@ class UnifiedClaudeScheduler {
               lastUsedAt: account.lastUsedAt || '0'
             })
             logger.info(
-              `✅ Added CCR account to available pool: ${account.name} (priority: ${account.priority})`
+              `✅ Added CCR account to available pool: ${account.name} (weight: ${account.priority})`
             )
           } else {
             if (isRateLimited) {
@@ -1621,11 +1619,9 @@ class UnifiedClaudeScheduler {
         throw new Error(`No available accounts in group ${group.name}`)
       }
 
-      // 使用现有的优先级排序逻辑
-      const sortedAccounts = sortAccountsByPriority(availableAccounts)
-
-      // 选择第一个账户
-      const selectedAccount = sortedAccounts[0]
+      const selectedAccount = selectAccountBySchedulingWeight(availableAccounts, {
+        stateKey: `claude:group:${groupId}:${requestedModel || '*'}`
+      })
 
       // 如果有会话哈希，建立新的映射
       if (sessionHash) {
@@ -1640,7 +1636,7 @@ class UnifiedClaudeScheduler {
       }
 
       logger.info(
-        `🎯 Selected account from group ${group.name}: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}) with priority ${selectedAccount.priority}`
+        `🎯 Selected account from group ${group.name}: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}) with weight ${selectedAccount.priority}`
       )
 
       return {
@@ -1691,9 +1687,9 @@ class UnifiedClaudeScheduler {
         )
       }
 
-      // 3. 按优先级和最后使用时间排序
-      const sortedAccounts = sortAccountsByPriority(availableCcrAccounts)
-      const selectedAccount = sortedAccounts[0]
+      const selectedAccount = selectAccountBySchedulingWeight(availableCcrAccounts, {
+        stateKey: `claude:ccr:${effectiveModel || '*'}`
+      })
 
       // 4. 建立会话映射
       if (sessionHash) {
@@ -1708,7 +1704,7 @@ class UnifiedClaudeScheduler {
       }
 
       logger.info(
-        `🎯 Selected CCR account: ${selectedAccount.name} (${selectedAccount.accountId}) with priority ${selectedAccount.priority} for API key ${apiKeyData.name}`
+        `🎯 Selected CCR account: ${selectedAccount.name} (${selectedAccount.accountId}) with weight ${selectedAccount.priority} for API key ${apiKeyData.name}`
       )
 
       return {

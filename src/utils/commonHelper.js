@@ -213,23 +213,115 @@ const getMappedModelName = (modelMapping, requestedModel) => {
 // 账户调度相关
 // ============================================
 
-// 按优先级和最后使用时间排序账户
-const sortAccountsByPriority = (accounts) =>
-  [...accounts].sort((a, b) => {
-    const priorityA = parseInt(a.priority, 10) || 50
-    const priorityB = parseInt(b.priority, 10) || 50
-    if (priorityA !== priorityB) {
-      return priorityA - priorityB
-    }
-    const lastUsedA = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0
-    const lastUsedB = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0
-    if (lastUsedA !== lastUsedB) {
-      return lastUsedA - lastUsedB
-    }
-    const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0
-    const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+const MAX_SCHEDULING_WEIGHT_STATES = 512
+const schedulingWeightStates = new Map()
+
+const normalizeSchedulingWeight = (value) => {
+  const parsed = parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 50
+  }
+  return Math.min(parsed, 100)
+}
+
+const getSchedulingAccountKey = (account) => {
+  const type = account.accountType || account.platform || 'account'
+  const id = account.accountId || account.id || account.name || 'unknown'
+  return `${type}:${id}`
+}
+
+const getSortableTime = (value) => {
+  if (!value) {
+    return 0
+  }
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : 0
+}
+
+const compareSchedulingAccounts = (a, b) => {
+  const lastUsedA = getSortableTime(a.lastUsedAt)
+  const lastUsedB = getSortableTime(b.lastUsedAt)
+  if (lastUsedA !== lastUsedB) {
+    return lastUsedA - lastUsedB
+  }
+
+  const createdA = getSortableTime(a.createdAt)
+  const createdB = getSortableTime(b.createdAt)
+  if (createdA !== createdB) {
     return createdA - createdB
-  })
+  }
+
+  return 0
+}
+
+const touchSchedulingStateKey = (stateStore, stateKey, state, maxStateKeys) => {
+  const parsedMaxStateKeys = parseInt(maxStateKeys, 10)
+  const effectiveMaxStateKeys =
+    Number.isFinite(parsedMaxStateKeys) && parsedMaxStateKeys > 0
+      ? parsedMaxStateKeys
+      : MAX_SCHEDULING_WEIGHT_STATES
+
+  if (stateStore.has(stateKey)) {
+    stateStore.delete(stateKey)
+  }
+  stateStore.set(stateKey, state)
+
+  while (stateStore.size > effectiveMaxStateKeys) {
+    const oldestStateKey = stateStore.keys().next().value
+    stateStore.delete(oldestStateKey)
+  }
+}
+
+const selectAccountBySchedulingWeight = (accounts, options = {}) => {
+  if (!Array.isArray(accounts) || accounts.length === 0) {
+    return null
+  }
+
+  const {
+    stateKey = 'default',
+    stateStore = schedulingWeightStates,
+    maxStateKeys = MAX_SCHEDULING_WEIGHT_STATES
+  } = options
+  const state = stateStore.get(stateKey) || new Map()
+  const candidates = [...accounts].sort(compareSchedulingAccounts)
+  const candidateKeys = new Set()
+  let totalWeight = 0
+
+  for (const account of candidates) {
+    const accountKey = getSchedulingAccountKey(account)
+    const weight = normalizeSchedulingWeight(account.priority)
+    const currentWeight = Number(state.get(accountKey)) || 0
+
+    candidateKeys.add(accountKey)
+    totalWeight += weight
+    state.set(accountKey, currentWeight + weight)
+  }
+
+  for (const accountKey of [...state.keys()]) {
+    if (!candidateKeys.has(accountKey)) {
+      state.delete(accountKey)
+    }
+  }
+
+  let selectedAccount = candidates[0]
+  let selectedAccountKey = getSchedulingAccountKey(selectedAccount)
+  let selectedCurrentWeight = Number(state.get(selectedAccountKey)) || 0
+
+  for (const account of candidates.slice(1)) {
+    const accountKey = getSchedulingAccountKey(account)
+    const currentWeight = Number(state.get(accountKey)) || 0
+    if (currentWeight > selectedCurrentWeight) {
+      selectedAccount = account
+      selectedAccountKey = accountKey
+      selectedCurrentWeight = currentWeight
+    }
+  }
+
+  state.set(selectedAccountKey, selectedCurrentWeight - totalWeight)
+  touchSchedulingStateKey(stateStore, stateKey, state, maxStateKeys)
+
+  return selectedAccount
+}
 
 // 生成粘性会话 Key
 const composeStickySessionKey = (prefix, sessionHash, apiKeyId = null) => {
@@ -386,7 +478,8 @@ module.exports = {
   isModelInMapping,
   getMappedModelName,
   // 调度
-  sortAccountsByPriority,
+  normalizeSchedulingWeight,
+  selectAccountBySchedulingWeight,
   composeStickySessionKey,
   filterAvailableAccounts,
   // 字符串

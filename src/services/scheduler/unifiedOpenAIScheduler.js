@@ -3,7 +3,7 @@ const openaiResponsesAccountService = require('../account/openaiResponsesAccount
 const accountGroupService = require('../accountGroupService')
 const redis = require('../../models/redis')
 const logger = require('../../utils/logger')
-const { isSchedulable, sortAccountsByPriority } = require('../../utils/commonHelper')
+const { isSchedulable, selectAccountBySchedulingWeight } = require('../../utils/commonHelper')
 const upstreamErrorHelper = require('../../utils/upstreamErrorHelper')
 
 class UnifiedOpenAIScheduler {
@@ -317,11 +317,9 @@ class UnifiedOpenAIScheduler {
         }
       }
 
-      // 按优先级和最后使用时间排序（与 Claude/Gemini 调度保持一致）
-      const sortedAccounts = sortAccountsByPriority(availableAccounts)
-
-      // 选择第一个账户
-      const selectedAccount = sortedAccounts[0]
+      const selectedAccount = selectAccountBySchedulingWeight(availableAccounts, {
+        stateKey: `openai:shared:${requestedModel || '*'}`
+      })
 
       // 如果有会话哈希，建立新的映射
       if (sessionHash) {
@@ -336,7 +334,7 @@ class UnifiedOpenAIScheduler {
       }
 
       logger.info(
-        `🎯 Selected account: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}, priority: ${selectedAccount.priority || 50}) for API key ${apiKeyData.name}`
+        `🎯 Selected account: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}, weight: ${selectedAccount.priority || 50}) for API key ${apiKeyData.name}`
       )
 
       // 更新账户的最后使用时间
@@ -954,11 +952,9 @@ class UnifiedOpenAIScheduler {
         throw error
       }
 
-      // 按优先级和最后使用时间排序（与 Claude/Gemini 调度保持一致）
-      const sortedAccounts = sortAccountsByPriority(availableAccounts)
-
-      // 选择第一个账户
-      const selectedAccount = sortedAccounts[0]
+      const selectedAccount = selectAccountBySchedulingWeight(availableAccounts, {
+        stateKey: `openai:group:${groupId}:${requestedModel || '*'}`
+      })
 
       // 如果有会话哈希，建立新的映射
       if (sessionHash) {
@@ -973,7 +969,7 @@ class UnifiedOpenAIScheduler {
       }
 
       logger.info(
-        `🎯 Selected account from group: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}, priority: ${selectedAccount.priority || 50})`
+        `🎯 Selected account from group: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}, weight: ${selectedAccount.priority || 50})`
       )
 
       // 更新账户的最后使用时间

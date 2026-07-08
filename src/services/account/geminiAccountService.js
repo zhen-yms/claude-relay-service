@@ -498,7 +498,7 @@ async function createAccount(accountData) {
 
     // 调度相关
     schedulable: accountData.schedulable !== undefined ? String(accountData.schedulable) : 'true',
-    priority: accountData.priority || 50, // 调度优先级 (1-100，数字越小优先级越高)
+    priority: accountData.priority || 50, // 调度权重 (1-100，数字越大分配越多)
 
     // OAuth 相关字段（加密存储）
     geminiOauth: geminiOauth ? encrypt(geminiOauth) : '',

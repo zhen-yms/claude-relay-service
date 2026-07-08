@@ -90,7 +90,7 @@ class ClaudeAccountService {
       isActive = true,
       accountType = 'shared', // 'dedicated' or 'shared'
       platform = 'claude',
-      priority = 50, // 调度优先级 (1-100，数字越小优先级越高)
+      priority = 50, // 调度权重 (1-100，数字越大分配越多)
       schedulable = true, // 是否可被调度
       subscriptionInfo = null, // 手动设置的订阅信息
       autoStopOnWarning = false, // 5小时使用量接近限制时自动停止调度
@@ -135,7 +135,7 @@ class ClaudeAccountService {
         isActive: isActive.toString(),
         accountType, // 账号类型：'dedicated' 或 'shared' 或 'group'
         platform,
-        priority: priority.toString(), // 调度优先级
+        priority: priority.toString(), // 调度权重
         createdAt: new Date().toISOString(),
         lastUsedAt: '',
         lastRefreshAt: '',
@@ -181,7 +181,7 @@ class ClaudeAccountService {
         isActive: isActive.toString(),
         accountType, // 账号类型：'dedicated' 或 'shared' 或 'group'
         platform,
-        priority: priority.toString(), // 调度优先级
+        priority: priority.toString(), // 调度权重
         createdAt: new Date().toISOString(),
         lastUsedAt: '',
         lastRefreshAt: '',
@@ -588,7 +588,7 @@ class ClaudeAccountService {
             status: account.status,
             errorMessage: account.errorMessage,
             accountType: account.accountType || 'shared', // 兼容旧数据，默认为共享
-            priority: parseInt(account.priority) || 50, // 兼容旧数据，默认优先级50
+            priority: parseInt(account.priority) || 50, // 兼容旧数据，默认调度权重50
             platform: account.platform || 'claude', // 添加平台标识，用于前端区分
             authType, // OAuth 或 Setup Token
             createdAt: account.createdAt,

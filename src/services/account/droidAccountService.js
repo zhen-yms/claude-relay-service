@@ -5,7 +5,11 @@ const redis = require('../../models/redis')
 const logger = require('../../utils/logger')
 const { maskToken } = require('../../utils/tokenMask')
 const ProxyHelper = require('../../utils/proxyHelper')
-const { createEncryptor, isTruthy } = require('../../utils/commonHelper')
+const {
+  createEncryptor,
+  isTruthy,
+  selectAccountBySchedulingWeight
+} = require('../../utils/commonHelper')
 const upstreamErrorHelper = require('../../utils/upstreamErrorHelper')
 
 /**
@@ -466,7 +470,7 @@ class DroidAccountService {
       isActive = true,
       accountType = 'shared', // 'dedicated' or 'shared'
       platform = 'droid',
-      priority = 50, // 调度优先级 (1-100)
+      priority = 50, // 调度权重 (1-100，数字越大分配越多)
       schedulable = true, // 是否可被调度
       endpointType = 'anthropic', // 默认端点类型: 'anthropic', 'openai' 或 'comm'
       organizationId = '',
@@ -1422,7 +1426,6 @@ class DroidAccountService {
         // 解密 accessToken 用于使用
         accessToken: this._decryptSensitiveData(account.accessToken)
       }))
-      .sort((a, b) => a.priority - b.priority) // 按优先级排序
   }
 
   /**
@@ -1444,20 +1447,9 @@ class DroidAccountService {
       )
     }
 
-    // 简单轮询：选择最高优先级且最久未使用的账户
-    let selectedAccount = accounts[0]
-    for (const account of accounts) {
-      if (account.priority < selectedAccount.priority) {
-        selectedAccount = account
-      } else if (account.priority === selectedAccount.priority) {
-        // 相同优先级，选择最久未使用的
-        const selectedLastUsed = new Date(selectedAccount.lastUsedAt || 0).getTime()
-        const accountLastUsed = new Date(account.lastUsedAt || 0).getTime()
-        if (accountLastUsed < selectedLastUsed) {
-          selectedAccount = account
-        }
-      }
-    }
+    const selectedAccount = selectAccountBySchedulingWeight(accounts, {
+      stateKey: `droid-account-service:${endpointType || 'default'}`
+    })
 
     // 更新最后使用时间
     await this.updateAccount(selectedAccount.id, {

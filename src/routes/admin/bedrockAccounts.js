@@ -135,7 +135,7 @@ router.post('/', authenticateAdmin, async (req, res) => {
 
     // 验证priority的有效性（1-100）
     if (priority !== undefined && (priority < 1 || priority > 100)) {
-      return res.status(400).json({ error: 'Priority must be between 1 and 100' })
+      return res.status(400).json({ error: 'Scheduling weight must be between 1 and 100' })
     }
 
     // 验证accountType的有效性
@@ -195,7 +195,7 @@ router.put('/:accountId', authenticateAdmin, async (req, res) => {
       mappedUpdates.priority !== undefined &&
       (mappedUpdates.priority < 1 || mappedUpdates.priority > 100)
     ) {
-      return res.status(400).json({ error: 'Priority must be between 1 and 100' })
+      return res.status(400).json({ error: 'Scheduling weight must be between 1 and 100' })
     }
 
     // 验证accountType的有效性

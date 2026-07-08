@@ -6,6 +6,7 @@ const config = require('../../../config/config')
 const bedrockRelayService = require('../relay/bedrockRelayService')
 const LRUCache = require('../../utils/lruCache')
 const upstreamErrorHelper = require('../../utils/upstreamErrorHelper')
+const { selectAccountBySchedulingWeight } = require('../../utils/commonHelper')
 
 class BedrockAccountService {
   constructor() {
@@ -40,7 +41,7 @@ class BedrockAccountService {
       defaultModel = 'us.anthropic.claude-sonnet-4-20250514-v1:0',
       isActive = true,
       accountType = 'shared', // 'dedicated' or 'shared'
-      priority = 50, // 调度优先级 (1-100，数字越小优先级越高)
+      priority = 50, // 调度权重 (1-100，数字越大分配越多)
       schedulable = true, // 是否可被调度
       credentialType = 'access_key', // 'access_key', 'bearer_token'（默认为 access_key）
       disableAutoProtection = false // 是否关闭自动防护（429/401/400/529 不自动禁用）
@@ -256,7 +257,7 @@ class BedrockAccountService {
         }
       }
 
-      // 按优先级和名称排序
+      // 列表按 priority 字段和名称排序
       accounts.sort((a, b) => {
         if (a.priority !== b.priority) {
           return a.priority - b.priority
@@ -425,8 +426,9 @@ class BedrockAccountService {
         return { success: false, error: 'No available Bedrock accounts' }
       }
 
-      // 简单的轮询选择策略 - 选择优先级最高的账户
-      const selectedAccount = availableAccounts[0]
+      const selectedAccount = selectAccountBySchedulingWeight(availableAccounts, {
+        stateKey: 'bedrock:shared'
+      })
 
       // 获取完整账户信息（包含解密的凭证）
       const fullAccountResult = await this.getAccount(selectedAccount.id)

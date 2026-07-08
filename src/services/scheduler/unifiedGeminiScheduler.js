@@ -3,7 +3,11 @@ const geminiApiAccountService = require('../account/geminiApiAccountService')
 const accountGroupService = require('../accountGroupService')
 const redis = require('../../models/redis')
 const logger = require('../../utils/logger')
-const { isSchedulable, isActive, sortAccountsByPriority } = require('../../utils/commonHelper')
+const {
+  isSchedulable,
+  isActive,
+  selectAccountBySchedulingWeight
+} = require('../../utils/commonHelper')
 const upstreamErrorHelper = require('../../utils/upstreamErrorHelper')
 
 const OAUTH_PROVIDER_GEMINI_CLI = 'gemini-cli'
@@ -180,11 +184,9 @@ class UnifiedGeminiScheduler {
         }
       }
 
-      // 按优先级和最后使用时间排序
-      const sortedAccounts = sortAccountsByPriority(availableAccounts)
-
-      // 选择第一个账户
-      const selectedAccount = sortedAccounts[0]
+      const selectedAccount = selectAccountBySchedulingWeight(availableAccounts, {
+        stateKey: `gemini:shared:${normalizedOauthProvider || 'default'}:${allowApiAccounts ? 'with-api' : 'oauth'}:${requestedModel || '*'}`
+      })
 
       // 如果有会话哈希，建立新的映射
       if (sessionHash) {
@@ -200,7 +202,7 @@ class UnifiedGeminiScheduler {
       }
 
       logger.info(
-        `🎯 Selected account: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}) with priority ${selectedAccount.priority} for API key ${apiKeyData.name}`
+        `🎯 Selected account: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}) with weight ${selectedAccount.priority} for API key ${apiKeyData.name}`
       )
 
       // 更新账户的最后使用时间（根据账户类型调用正确的服务）
@@ -412,7 +414,7 @@ class UnifiedGeminiScheduler {
             ...account,
             accountId: account.id,
             accountType: 'gemini',
-            priority: parseInt(account.priority) || 50, // 默认优先级50
+            priority: parseInt(account.priority) || 50, // 默认调度权重50
             lastUsedAt: account.lastUsedAt || '0'
           })
         }
@@ -824,11 +826,9 @@ class UnifiedGeminiScheduler {
         throw new Error(`No available accounts in Gemini group ${group.name}`)
       }
 
-      // 使用现有的优先级排序逻辑
-      const sortedAccounts = sortAccountsByPriority(availableAccounts)
-
-      // 选择第一个账户
-      const selectedAccount = sortedAccounts[0]
+      const selectedAccount = selectAccountBySchedulingWeight(availableAccounts, {
+        stateKey: `gemini:group:${groupId}:${requestedModel || '*'}`
+      })
 
       // 如果有会话哈希，建立新的映射
       if (sessionHash) {
@@ -843,7 +843,7 @@ class UnifiedGeminiScheduler {
       }
 
       logger.info(
-        `🎯 Selected account from Gemini group ${group.name}: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}) with priority ${selectedAccount.priority}`
+        `🎯 Selected account from Gemini group ${group.name}: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}) with weight ${selectedAccount.priority}`
       )
 
       // 更新账户的最后使用时间（根据账户类型调用正确的服务）

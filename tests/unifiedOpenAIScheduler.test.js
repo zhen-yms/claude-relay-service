@@ -18,7 +18,7 @@ jest.mock('../src/utils/logger', () => ({
 }))
 jest.mock('../src/utils/commonHelper', () => ({
   isSchedulable: jest.fn((value) => value !== false && value !== 'false'),
-  sortAccountsByPriority: jest.fn((accounts) => accounts)
+  selectAccountBySchedulingWeight: jest.fn((accounts) => accounts[0])
 }))
 jest.mock('../src/utils/upstreamErrorHelper', () => ({}))
 

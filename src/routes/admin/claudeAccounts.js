@@ -654,7 +654,7 @@ router.post('/claude-accounts', authenticateAdmin, async (req, res) => {
       priority !== undefined &&
       (typeof priority !== 'number' || priority < 1 || priority > 100)
     ) {
-      return res.status(400).json({ error: 'Priority must be a number between 1 and 100' })
+      return res.status(400).json({ error: 'Scheduling weight must be a number between 1 and 100' })
     }
 
     const { normalized: normalizedTempUnavailablePolicy, error: tempUnavailablePolicyError } =
@@ -677,7 +677,7 @@ router.post('/claude-accounts', authenticateAdmin, async (req, res) => {
       proxy,
       accountType: accountType || 'shared', // 默认为共享类型
       platform,
-      priority: priority || 50, // 默认优先级为50
+      priority: priority || 50, // 默认调度权重为50
       autoStopOnWarning: autoStopOnWarning === true, // 默认为false
       useUnifiedUserAgent: useUnifiedUserAgent === true, // 默认为false
       useUnifiedClientId: useUnifiedClientId === true, // 默认为false
@@ -729,7 +729,7 @@ router.put('/claude-accounts/:accountId', authenticateAdmin, async (req, res) =>
         mappedUpdates.priority < 1 ||
         mappedUpdates.priority > 100)
     ) {
-      return res.status(400).json({ error: 'Priority must be a number between 1 and 100' })
+      return res.status(400).json({ error: 'Scheduling weight must be a number between 1 and 100' })
     }
 
     const { normalized: normalizedTempUnavailablePolicy, error: tempUnavailablePolicyError } =

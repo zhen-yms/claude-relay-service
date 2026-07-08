@@ -6,7 +6,7 @@ const upstreamErrorHelper = require('../../utils/upstreamErrorHelper')
 const {
   isTruthy,
   isAccountHealthy,
-  sortAccountsByPriority,
+  selectAccountBySchedulingWeight,
   normalizeEndpointType
 } = require('../../utils/commonHelper')
 
@@ -173,11 +173,12 @@ class DroidScheduler {
       }
     }
 
-    const sorted = sortAccountsByPriority(filtered)
-    const selected = sorted[0]
+    const selected = selectAccountBySchedulingWeight(filtered, {
+      stateKey: `droid:shared:${normalizedEndpoint}`
+    })
 
     if (!selected) {
-      throw new Error(`No schedulable account available after sorting (${normalizedEndpoint})`)
+      throw new Error(`No schedulable account available after weighted scheduling (${normalizedEndpoint})`)
     }
 
     if (stickyKey && !isDedicatedBinding) {
@@ -187,7 +188,7 @@ class DroidScheduler {
     await this._ensureLastUsedUpdated(selected.id)
 
     logger.info(
-      `🤖 选择 Droid 账号 ${selected.name || selected.id}（endpoint: ${normalizedEndpoint}, priority: ${selected.priority || 50}）`
+      `🤖 选择 Droid 账号 ${selected.name || selected.id}（endpoint: ${normalizedEndpoint}, weight: ${selected.priority || 50}）`
     )
 
     return selected
