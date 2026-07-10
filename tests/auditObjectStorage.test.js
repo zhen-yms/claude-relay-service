@@ -48,4 +48,30 @@ describe('AuditObjectStorage', () => {
       expect.not.arrayContaining(['request_id', 'artifact_kind'])
     )
   })
+
+  test('keeps repeated upstream request objects distinct by sequence', async () => {
+    const spoolPath = path.join(tempDir, 'upstream_request.json')
+    await fs.writeFile(spoolPath, JSON.stringify({ body: { prompt: 'hello' } }))
+
+    const client = { send: jest.fn().mockResolvedValue({}) }
+    const storage = new AuditObjectStorage({
+      client,
+      configProvider: () => ({
+        minioBucket: 'audit',
+        objectKeyPrefix: 'ai-call-audit'
+      })
+    })
+
+    const stored = await storage.uploadArtifact(
+      { kind: 'upstream_request', sequence: 2, spoolPath },
+      {
+        requestId: 'req_1',
+        apiKeyId: 'key_1',
+        createdAt: '2026-07-03T12:00:00.000Z'
+      }
+    )
+
+    expect(stored.sequence).toBe(2)
+    expect(stored.objectKey).toMatch(/\/upstream_request-2\.json\.gz$/)
+  })
 })

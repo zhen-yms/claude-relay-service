@@ -36,7 +36,8 @@ class AuditObjectStorage {
       createdAt: call.createdAt,
       apiKeyId: call.apiKeyId,
       requestId: call.requestId,
-      kind: artifact.kind
+      kind: artifact.kind,
+      sequence: artifact.sequence
     })
 
     await this.getClient(config).send(
@@ -55,6 +56,7 @@ class AuditObjectStorage {
 
     return {
       kind: artifact.kind,
+      sequence: Number(artifact.sequence || 0),
       bucket: config.minioBucket,
       objectKey,
       bytes: body.length,

@@ -82,6 +82,7 @@ class AuditRepository {
         call_id TEXT NOT NULL,
         request_id TEXT NOT NULL,
         kind TEXT NOT NULL,
+        sequence INTEGER NOT NULL DEFAULT 0,
         bucket TEXT NOT NULL,
         object_key TEXT NOT NULL,
         bytes BIGINT NOT NULL,
@@ -89,6 +90,16 @@ class AuditRepository {
         content_type TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       )
+    `)
+
+    await this.query(`
+      ALTER TABLE IF EXISTS audit_artifacts
+      ADD COLUMN IF NOT EXISTS sequence INTEGER NOT NULL DEFAULT 0
+    `)
+
+    await this.query(`
+      CREATE INDEX IF NOT EXISTS audit_artifacts_request_id_id_idx
+      ON audit_artifacts (request_id, id)
     `)
 
     await this.ensureMonthlyPartition(referenceDate)
@@ -104,6 +115,25 @@ class AuditRepository {
       CREATE TABLE IF NOT EXISTS audit_calls_${suffix}
       PARTITION OF audit_calls
       FOR VALUES FROM ('${startLiteral}') TO ('${endLiteral}')
+    `)
+
+    await this.query(`
+      CREATE INDEX IF NOT EXISTS audit_calls_${suffix}_query_order_idx
+      ON audit_calls_${suffix} (created_at DESC, request_id DESC)
+    `)
+    await this.query(`
+      CREATE INDEX IF NOT EXISTS audit_calls_${suffix}_request_id_idx
+      ON audit_calls_${suffix} (request_id)
+    `)
+    await this.query(`
+      CREATE INDEX IF NOT EXISTS audit_calls_${suffix}_user_query_idx
+      ON audit_calls_${suffix} (user_id, created_at DESC, request_id DESC)
+      WHERE user_id IS NOT NULL
+    `)
+    await this.query(`
+      CREATE INDEX IF NOT EXISTS audit_calls_${suffix}_api_key_query_idx
+      ON audit_calls_${suffix} (api_key_id, created_at DESC, request_id DESC)
+      WHERE api_key_id IS NOT NULL
     `)
   }
 
@@ -190,13 +220,15 @@ class AuditRepository {
       await this.query(
         `
           INSERT INTO audit_artifacts (
-            call_id, request_id, kind, bucket, object_key, bytes, sha256, content_type, created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            call_id, request_id, kind, sequence, bucket, object_key, bytes, sha256,
+            content_type, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `,
         [
           requestId,
           requestId,
           artifact.kind,
+          Number(artifact.sequence || 0),
           artifact.bucket,
           artifact.objectKey,
           artifact.bytes,

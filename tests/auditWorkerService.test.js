@@ -41,6 +41,7 @@ describe('AuditWorkerService', () => {
     }
     const objectStorage = {
       uploadArtifact: jest.fn().mockResolvedValue({
+        sequence: 0,
         bucket: 'audit',
         objectKey:
           'ai-call-audit/dt=2026-07-03/api_key=key_1/request_id=req_1/client_request.json.gz',
@@ -61,7 +62,7 @@ describe('AuditWorkerService', () => {
       apiKeyId: 'key_1',
       endpoint: '/api/v1/messages',
       protocol: 'anthropic',
-      artifacts: [{ kind: 'client_request', spoolPath }],
+      artifacts: [{ kind: 'client_request', sequence: 0, spoolPath }],
       eventSpoolPath,
       attempt: 0
     })
@@ -86,6 +87,7 @@ describe('AuditWorkerService', () => {
     expect(repository.replaceArtifacts).toHaveBeenCalledWith('req_1', [
       expect.objectContaining({
         kind: 'client_request',
+        sequence: 0,
         objectKey: expect.stringContaining('/client_request.json.gz')
       })
     ])
@@ -136,7 +138,6 @@ describe('AuditWorkerService', () => {
   })
 
   test('uses a dedicated redis connection for blocking stream reads', async () => {
-    let worker
     const sharedClient = {
       xreadgroup: jest.fn(async () => {
         worker.running = false
@@ -152,7 +153,7 @@ describe('AuditWorkerService', () => {
     }
     redis.getClientSafe.mockReturnValue(sharedClient)
 
-    worker = new AuditWorkerService({
+    const worker = new AuditWorkerService({
       repository: {},
       objectStorage: {},
       eventPublisher: {},

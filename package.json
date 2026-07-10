@@ -5,6 +5,7 @@
   "main": "src/app.js",
   "scripts": {
     "start": "npm run lint && node src/app.js",
+    "start:audit-query": "node src/auditQueryApp.js",
     "dev": "nodemon",
     "build:web": "cd web/admin-spa && npm run build",
     "install:web": "cd web/admin-spa && npm install",
@@ -38,6 +39,8 @@
     "migrate:apikey-expiry": "node scripts/migrate-apikey-expiry.js",
     "migrate:apikey-expiry:dry": "node scripts/migrate-apikey-expiry.js --dry-run",
     "migrate:request-detail-retention-hours": "node scripts/reset-request-detail-retention-hours.js",
+    "migrate:audit-query:check": "node scripts/migrate-audit-query-schema.js --check",
+    "migrate:audit-query": "node scripts/migrate-audit-query-schema.js --apply",
     "migrate:fix-usage-stats": "node scripts/fix-usage-stats.js",
     "data:export": "node scripts/data-transfer.js export",
     "data:import": "node scripts/data-transfer.js import",

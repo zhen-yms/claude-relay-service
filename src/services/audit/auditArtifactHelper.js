@@ -10,14 +10,19 @@ function encodePathPart(value) {
   return encodeURIComponent(raw)
 }
 
-function buildAuditObjectKey({ prefix, createdAt, apiKeyId, requestId, kind }) {
+function buildAuditObjectKey({ prefix, createdAt, apiKeyId, requestId, kind, sequence = 0 }) {
   const date = new Date(createdAt || Date.now()).toISOString().slice(0, 10)
+  const normalizedSequence = Number.isInteger(Number(sequence)) ? Math.max(Number(sequence), 0) : 0
+  const artifactFilename =
+    normalizedSequence === 0
+      ? `${encodePathPart(kind)}.json.gz`
+      : `${encodePathPart(kind)}-${normalizedSequence}.json.gz`
   return [
     normalizePrefix(prefix),
     `dt=${date}`,
     `api_key=${encodePathPart(apiKeyId)}`,
     `request_id=${encodePathPart(requestId)}`,
-    `${encodePathPart(kind)}.json.gz`
+    artifactFilename
   ].join('/')
 }
 

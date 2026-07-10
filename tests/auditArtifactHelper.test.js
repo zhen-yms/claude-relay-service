@@ -35,4 +35,17 @@ describe('auditArtifactHelper', () => {
     expect(decompressed).toEqual(payload)
     expect(sha256Hex(compressed)).toMatch(/^[a-f0-9]{64}$/)
   })
+
+  test('adds a suffix only for repeated artifacts of the same kind', () => {
+    const base = {
+      prefix: 'ai-call-audit',
+      createdAt: '2026-07-03T12:34:56.000Z',
+      apiKeyId: 'key_1',
+      requestId: 'req_123',
+      kind: 'upstream_request'
+    }
+
+    expect(buildAuditObjectKey({ ...base, sequence: 0 })).toMatch(/\/upstream_request\.json\.gz$/)
+    expect(buildAuditObjectKey({ ...base, sequence: 1 })).toMatch(/\/upstream_request-1\.json\.gz$/)
+  })
 })
