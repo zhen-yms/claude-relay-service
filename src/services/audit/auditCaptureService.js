@@ -51,6 +51,16 @@ function getResponseHeaders(res) {
   return {}
 }
 
+function getCapturedStatusCode(context, res) {
+  if (!res) {
+    return null
+  }
+  if (context.terminationReason && res.headersSent !== true) {
+    return null
+  }
+  return res.statusCode || null
+}
+
 function addDays(date, days) {
   const result = new Date(date.getTime())
   result.setUTCDate(result.getUTCDate() + days)
@@ -92,6 +102,7 @@ class AuditCaptureService {
       responseContentType: null,
       finished: false,
       finishPromise: null,
+      terminationReason: null,
       config
     }
 
@@ -126,7 +137,7 @@ class AuditCaptureService {
 
   captureUpstreamRequest(req, provider, payload, meta = {}) {
     const context = req?.auditContext
-    if (!context) {
+    if (!context || context.finished) {
       return null
     }
 
@@ -189,12 +200,27 @@ class AuditCaptureService {
       }
     }
 
-    if (typeof res.once === 'function') {
-      res.once('finish', () => {
-        this.finish(req, res).catch((error) => {
-          logger.warn(`⚠️ Failed to finalize audit capture: ${error.message}`)
-        })
+    const finalize = (terminationReason = null) => {
+      const context = req.auditContext
+      if (terminationReason && !context.finishPromise && !context.terminationReason) {
+        context.terminationReason = terminationReason
+      }
+      this.finish(req, res).catch((error) => {
+        logger.warn(`⚠️ Failed to finalize audit capture: ${error.message}`)
       })
+    }
+
+    if (typeof res.once === 'function') {
+      res.once('finish', () => finalize())
+      res.once('close', () => {
+        if (res.writableFinished !== true) {
+          finalize('client_disconnected')
+        }
+      })
+    }
+
+    if (typeof req.once === 'function') {
+      req.once('aborted', () => finalize('client_aborted'))
     }
   }
 
@@ -239,9 +265,10 @@ class AuditCaptureService {
       kind: 'response',
       capturedAt: new Date().toISOString(),
       requestId: context.requestId,
-      statusCode: res?.statusCode || null,
+      statusCode: getCapturedStatusCode(context, res),
       headers: getResponseHeaders(res),
       contentType: context.responseContentType,
+      terminationReason: context.terminationReason,
       body
     })
   }
@@ -279,6 +306,9 @@ class AuditCaptureService {
     await this.captureResponse(context, res)
     await Promise.all(context.pendingWrites)
 
+    const statusCode = getCapturedStatusCode(context, res)
+    const aborted = Boolean(context.terminationReason)
+
     const event = {
       requestId: context.requestId,
       createdAt: context.createdAt,
@@ -291,12 +321,12 @@ class AuditCaptureService {
       apiKeyName: context.apiKeyName,
       userId: context.userId,
       userUsername: context.userUsername,
-      status: res?.statusCode >= 400 ? 'error' : 'ok',
-      statusCode: res?.statusCode || null,
+      status: aborted ? 'aborted' : statusCode >= 400 ? 'error' : 'ok',
+      statusCode,
       stream: context.stream,
       captureStatus: 'pending',
       artifacts: context.artifacts,
-      meta: {}
+      meta: aborted ? { terminationReason: context.terminationReason } : {}
     }
 
     event.eventSpoolPath = await this.writeEventManifest(context, event)

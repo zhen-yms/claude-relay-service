@@ -35,7 +35,7 @@ const auditEventPublisher = require('../src/services/audit/auditEventPublisher')
 const auditCaptureService = require('../src/services/audit/auditCaptureService')
 
 function createReq() {
-  return {
+  return Object.assign(new EventEmitter(), {
     method: 'POST',
     originalUrl: '/api/v1/messages',
     path: '/v1/messages',
@@ -56,7 +56,7 @@ function createReq() {
       userId: 'user_1',
       userUsername: 'alice'
     }
-  }
+  })
 }
 
 function createRes() {
@@ -65,6 +65,7 @@ function createRes() {
   res.headers = {}
   res.headersSent = false
   res.writableEnded = false
+  res.writableFinished = false
   res.setHeader = jest.fn((key, value) => {
     res.headers[key.toLowerCase()] = value
   })
@@ -72,11 +73,15 @@ function createRes() {
   res.getHeaders = jest.fn(() => res.headers)
   res.json = jest.fn((payload) => {
     res.payload = payload
+    res.writableEnded = true
+    res.writableFinished = true
     res.emit('finish')
     return res
   })
   res.send = jest.fn((payload) => {
     res.payload = payload
+    res.writableEnded = true
+    res.writableFinished = true
     res.emit('finish')
     return res
   })
@@ -86,6 +91,7 @@ function createRes() {
       res.payload = payload
     }
     res.writableEnded = true
+    res.writableFinished = true
     res.emit('finish')
     return res
   })
@@ -139,5 +145,65 @@ describe('auditCaptureService', () => {
     expect(clientPayload.body.messages[0].content).toBe('company prompt')
     expect(clientPayload.headers.authorization).toBe('[REDACTED]')
     expect(responsePayload.body).toEqual(payload)
+  })
+
+  test('finalizes an aborted audit event when the response closes before finish', async () => {
+    const req = createReq()
+    const res = createRes()
+
+    const context = auditCaptureService.start(req, res)
+    await auditCaptureService.captureUpstreamRequest(req, 'claude', req.body)
+
+    res.emit('close')
+
+    expect(context.finishPromise).toBeTruthy()
+    expect(auditCaptureService.captureUpstreamRequest(req, 'late-provider', req.body)).toBeNull()
+    await context.finishPromise
+    expect(auditEventPublisher.publishCaptureEvent).toHaveBeenCalledTimes(1)
+
+    const event = auditEventPublisher.publishCaptureEvent.mock.calls[0][0]
+    expect(event.status).toBe('aborted')
+    expect(event.statusCode).toBeNull()
+    expect(event.meta).toEqual({ terminationReason: 'client_disconnected' })
+    expect(event.artifacts.map((artifact) => artifact.kind).sort()).toEqual([
+      'client_request',
+      'response',
+      'upstream_request'
+    ])
+
+    const responseArtifact = event.artifacts.find((artifact) => artifact.kind === 'response')
+    const responsePayload = JSON.parse(await fs.readFile(responseArtifact.spoolPath, 'utf8'))
+    expect(responsePayload.statusCode).toBeNull()
+    expect(responsePayload.terminationReason).toBe('client_disconnected')
+  })
+
+  test('finalizes an aborted audit event when the request is aborted', async () => {
+    const req = createReq()
+    const res = createRes()
+
+    const context = auditCaptureService.start(req, res)
+    req.emit('aborted')
+
+    expect(context.finishPromise).toBeTruthy()
+    await context.finishPromise
+
+    const event = auditEventPublisher.publishCaptureEvent.mock.calls[0][0]
+    expect(event.status).toBe('aborted')
+    expect(event.meta).toEqual({ terminationReason: 'client_aborted' })
+  })
+
+  test('does not publish twice when a normally finished response later closes', async () => {
+    const req = createReq()
+    const res = createRes()
+
+    auditCaptureService.start(req, res)
+    res.json({ id: 'msg_1' })
+    res.emit('close')
+    await auditCaptureService.finish(req, res)
+
+    expect(auditEventPublisher.publishCaptureEvent).toHaveBeenCalledTimes(1)
+    const event = auditEventPublisher.publishCaptureEvent.mock.calls[0][0]
+    expect(event.status).toBe('ok')
+    expect(event.meta).toEqual({})
   })
 })
