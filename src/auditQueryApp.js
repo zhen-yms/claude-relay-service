@@ -59,9 +59,32 @@ function sendError(res, req, error) {
   })
 }
 
-async function writeGzipLine(gzip, value) {
+async function writeGzipLine(gzip, value, signal) {
+  signal?.throwIfAborted()
+  if (gzip.destroyed || gzip.writableEnded) {
+    throw new Error('Audit export gzip stream is closed')
+  }
   if (!gzip.write(`${JSON.stringify(value)}\n`, 'utf8')) {
-    await once(gzip, 'drain')
+    // A closed stream need not emit drain (or error). Cancel every wait path.
+    const waiter = new AbortController()
+    const onAbort = () => waiter.abort(signal.reason)
+    const onClose = () => waiter.abort(new Error('Audit export gzip stream is closed'))
+    signal?.addEventListener('abort', onAbort, { once: true })
+    gzip.once('close', onClose)
+    gzip.once('finish', onClose)
+    try {
+      if (signal?.aborted) {
+        onAbort()
+      }
+      if (gzip.destroyed || gzip.writableEnded) {
+        onClose()
+      }
+      await once(gzip, 'drain', { signal: waiter.signal })
+    } finally {
+      signal?.removeEventListener('abort', onAbort)
+      gzip.removeListener('close', onClose)
+      gzip.removeListener('finish', onClose)
+    }
   }
 }
 
@@ -172,23 +195,47 @@ function createAuditQueryApp(options = {}) {
     }
 
     const abortController = new AbortController()
+    let gzip = null
+    let released = false
+    let streamStarted = false
+    const release = () => {
+      if (released) {
+        return
+      }
+      released = true
+      clearTimeout(timeout)
+      req.removeListener('aborted', abortOnDisconnect)
+      res.removeListener('close', abortOnDisconnect)
+      res.removeListener('finish', release)
+      res.removeListener('error', abortOnError)
+      abortController.signal.removeEventListener('abort', cancel)
+      activeExports -= 1
+    }
+    const cancel = () => {
+      // Release independently of iterator cleanup: a database read may not be abortable.
+      gzip?.destroy()
+      res.destroy()
+      release()
+    }
+    const abortOnError = (error) => abortController.abort(error)
+    const abortOnDisconnect = () => {
+      // writableEnded only means end() was called, not that the client received the data.
+      if (!res.writableFinished) {
+        abortController.abort()
+      }
+    }
     const timeout = setTimeout(() => {
       const error = new Error('Audit export timed out')
       error.code = 'audit_export_timeout'
       abortController.abort(error)
     }, config.exportTimeoutMs)
     timeout.unref?.()
-    const abortOnDisconnect = () => {
-      if (!res.writableEnded) {
-        abortController.abort()
-      }
-    }
     req.once('aborted', abortOnDisconnect)
     res.once('close', abortOnDisconnect)
-
+    res.once('error', abortOnError)
+    res.once('finish', release)
+    abortController.signal.addEventListener('abort', cancel, { once: true })
     activeExports += 1
-    let gzip = null
-    let streamStarted = false
     try {
       const prepared = service.prepareExport(req.body || {})
       const records = service.exportRecords(req.body || {}, {
@@ -207,46 +254,49 @@ function createAuditQueryApp(options = {}) {
         })
         abortController.abort(error)
       })
+      gzip.once('close', () => {
+        if (!gzip.readableEnded) {
+          abortController.abort(new Error('Audit export gzip stream closed prematurely'))
+        }
+      })
       gzip.pipe(res)
       streamStarted = true
 
       for await (const record of records) {
-        await writeGzipLine(gzip, record)
+        await writeGzipLine(gzip, record, abortController.signal)
       }
     } catch (error) {
+      if (abortController.signal.aborted || res.destroyed) {
+        return undefined
+      }
       if (!streamStarted) {
         return sendError(res, req, error)
       }
       if (!res.destroyed && !gzip.destroyed) {
-        const timeoutReached = abortController.signal.reason?.code === 'audit_export_timeout'
         const knownError = error instanceof AuditQueryError
-        await writeGzipLine(gzip, {
-          type: 'summary',
-          schemaVersion: 1,
-          complete: false,
-          error: {
-            code: timeoutReached
-              ? 'export_timeout'
-              : isAbortError(error)
+        await writeGzipLine(
+          gzip,
+          {
+            type: 'summary',
+            schemaVersion: 1,
+            complete: false,
+            error: {
+              code: isAbortError(error)
                 ? 'export_aborted'
                 : knownError
                   ? error.code
                   : 'export_failed',
-            message: timeoutReached
-              ? 'Audit export exceeded its time limit'
-              : knownError
-                ? error.message
-                : 'Audit export failed'
+              message: knownError ? error.message : 'Audit export failed'
+            },
+            finishedAt: new Date().toISOString()
           },
-          finishedAt: new Date().toISOString()
-        }).catch(() => {})
+          abortController.signal
+        ).catch(() => {})
       }
     } finally {
-      clearTimeout(timeout)
-      req.removeListener('aborted', abortOnDisconnect)
-      res.removeListener('close', abortOnDisconnect)
-      activeExports -= 1
-      if (gzip && !gzip.destroyed) {
+      if (!gzip || abortController.signal.aborted) {
+        release()
+      } else if (!gzip.destroyed) {
         gzip.end()
       }
     }
